@@ -30,6 +30,10 @@ class WSDLDocument extends DOMDocument
      * @var string[]
      */
     protected $aCreatedTypes = array();
+    /*
+     * The presence of this array is part of an attempt to fix the issue where arrays of complex types (tns types) don't get described.
+     */
+    protected $aCreatedTypeArrays = array();
 
     /**
      * @var DOMElement
@@ -109,6 +113,7 @@ class WSDLDocument extends DOMDocument
                 $this->createMessage($oMethod);
             }
         }
+
         // append port type and binding
         $this->oDefinitions->appendChild($this->oPortType);
         $this->oDefinitions->appendChild($this->oBinding);
@@ -127,11 +132,25 @@ class WSDLDocument extends DOMDocument
     {
         // check if it was created
         $sName = $sType . 'Array';
-        if (array_key_exists($sType, $this->aCreatedTypes) == true) {
-            return $sName;
+
+        // is this a tns type? If so, put the check for arrays in another spot. Otherwise tns complex type arrays won't get created.
+        if ($this->getTypeNamespace($sType) == 'tns') {
+	        if (array_key_exists($sName, $this->aCreatedTypeArrays) == true) {
+	            return $sName;
+	        }
+        } else {
+		      if (array_key_exists($sType, $this->aCreatedTypes) == true) {
+	            return $sName;
+	        }
         }
-        // avoid recursion
-        $this->aCreatedTypes[$sType] = true;
+
+        // avoid recursion. Put tns types in their own array.
+        if ($this->getTypeNamespace($sType) == 'tns') {
+        	$this->aCreatedTypeArrays[$sType] = true;
+        } else {
+	      	$this->aCreatedTypes[$sType] = true;
+        }
+
         // create tags
         $oType = $this->createElementNS(self::NS_XSD, 'complexType');
         $this->oSchema->appendChild($oType);
@@ -303,6 +322,7 @@ class WSDLDocument extends DOMDocument
         $this->oDefinitions->appendChild($oService);
         // documentation
         $sDoc = $this->getDocComment($this->oClass->getDocComment());
+
         $oDoc = $this->createElementNS(self::NS_WSDL, 'documentation', $sDoc);
         $oService->appendChild($oDoc);
         // port
@@ -347,7 +367,7 @@ class WSDLDocument extends DOMDocument
             // force namespace to complex type, because it's an array
             $sNamespace = 'tns';
             for (; $iArrayDepth > 0; $iArrayDepth--) {
-                $sType = $this->createArrayType($sType);
+            		$sType = $this->createArrayType($sType);
             }
         }
         // wsdl type name
